@@ -16,6 +16,7 @@ export {
   actionChangeOpacity,
   actionChangeFontSize,
   actionChangeFontFamily,
+  actionChangeTextAlign,
 } from "./actionProperties";
 
 export {
@@ -24,6 +25,7 @@ export {
   actionZoomIn,
   actionZoomOut,
   actionResetZoom,
+  actionZoomToFit,
 } from "./actionCanvas";
 
 export { actionFinalize } from "./actionFinalize";
@@ -32,8 +34,16 @@ export {
   actionChangeProjectName,
   actionChangeExportBackground,
   actionSaveScene,
+  actionSaveAsScene,
   actionLoadScene,
 } from "./actionExport";
 
 export { actionCopyStyles, actionPasteStyles } from "./actionStyles";
-export { actionToggleCanvasMenu, actionToggleEditMenu } from "./actionMenu";
+export {
+  actionToggleCanvasMenu,
+  actionToggleEditMenu,
+  actionFullScreen,
+  actionShortcuts,
+} from "./actionMenu";
+
+export { actionGroup, actionUngroup } from "./actionGroup";

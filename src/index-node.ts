@@ -56,12 +56,14 @@ const elements = [
 
 registerFont("./public/FG_Virgil.ttf", { family: "Virgil" });
 registerFont("./public/Cascadia.ttf", { family: "Cascadia" });
+
 const canvas = exportToCanvas(
   elements as any,
   getDefaultAppState(),
   {
     exportBackground: true,
     viewBackgroundColor: "#ffffff",
+    shouldAddWatermark: false,
     scale: 1,
   },
   createCanvas,

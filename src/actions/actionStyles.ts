@@ -4,7 +4,11 @@ import {
   redrawTextBoundingBox,
 } from "../element";
 import { KEYS } from "../keys";
-import { DEFAULT_FONT } from "../appState";
+import {
+  DEFAULT_FONT_SIZE,
+  DEFAULT_FONT_FAMILY,
+  DEFAULT_TEXT_ALIGN,
+} from "../appState";
 import { register } from "./register";
 import { mutateElement, newElementWith } from "../element/mutateElement";
 
@@ -13,14 +17,16 @@ let copiedStyles: string = "{}";
 export const actionCopyStyles = register({
   name: "copyStyles",
   perform: (elements, appState) => {
-    const element = elements.find(el => appState.selectedElementIds[el.id]);
+    const element = elements.find((el) => appState.selectedElementIds[el.id]);
     if (element) {
       copiedStyles = JSON.stringify(element);
     }
-    return {};
+    return {
+      commitToHistory: false,
+    };
   },
   contextItemLabel: "labels.copyStyles",
-  keyTest: event =>
+  keyTest: (event) =>
     event[KEYS.CTRL_OR_CMD] && event.shiftKey && event.key === "C",
   contextMenuOrder: 0,
 });
@@ -30,10 +36,10 @@ export const actionPasteStyles = register({
   perform: (elements, appState) => {
     const pastedElement = JSON.parse(copiedStyles);
     if (!isExcalidrawElement(pastedElement)) {
-      return { elements };
+      return { elements, commitToHistory: false };
     }
     return {
-      elements: elements.map(element => {
+      elements: elements.map((element) => {
         if (appState.selectedElementIds[element.id]) {
           const newElement = newElementWith(element, {
             backgroundColor: pastedElement?.backgroundColor,
@@ -45,7 +51,9 @@ export const actionPasteStyles = register({
           });
           if (isTextElement(newElement)) {
             mutateElement(newElement, {
-              font: pastedElement?.font || DEFAULT_FONT,
+              fontSize: pastedElement?.fontSize || DEFAULT_FONT_SIZE,
+              fontFamily: pastedElement?.fontFamily || DEFAULT_FONT_FAMILY,
+              textAlign: pastedElement?.textAlign || DEFAULT_TEXT_ALIGN,
             });
             redrawTextBoundingBox(newElement);
           }
@@ -53,11 +61,11 @@ export const actionPasteStyles = register({
         }
         return element;
       }),
+      commitToHistory: true,
     };
   },
-  commitToHistory: () => true,
   contextItemLabel: "labels.pasteStyles",
-  keyTest: event =>
+  keyTest: (event) =>
     event[KEYS.CTRL_OR_CMD] && event.shiftKey && event.key === "V",
   contextMenuOrder: 1,
 });

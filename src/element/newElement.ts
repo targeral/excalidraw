@@ -1,28 +1,31 @@
-import { randomSeed } from "roughjs/bin/math";
-import nanoid from "nanoid";
-
 import {
   ExcalidrawElement,
   ExcalidrawTextElement,
   ExcalidrawLinearElement,
   ExcalidrawGenericElement,
+  NonDeleted,
+  TextAlign,
+  FontFamily,
+  GroupId,
 } from "../element/types";
-import { measureText } from "../utils";
+import { measureText, getFontString } from "../utils";
+import { randomInteger, randomId } from "../random";
+import { newElementWith } from "./mutateElement";
+import { getNewGroupIdsForDuplication } from "../groups";
+import { AppState } from "../types";
 
-type ElementConstructorOpts = {
-  x: ExcalidrawGenericElement["x"];
-  y: ExcalidrawGenericElement["y"];
-  strokeColor: ExcalidrawGenericElement["strokeColor"];
-  backgroundColor: ExcalidrawGenericElement["backgroundColor"];
-  fillStyle: ExcalidrawGenericElement["fillStyle"];
-  strokeWidth: ExcalidrawGenericElement["strokeWidth"];
-  roughness: ExcalidrawGenericElement["roughness"];
-  opacity: ExcalidrawGenericElement["opacity"];
-  width?: ExcalidrawGenericElement["width"];
-  height?: ExcalidrawGenericElement["height"];
-};
+type ElementConstructorOpts = MarkOptional<
+  Omit<ExcalidrawGenericElement, "id" | "type" | "isDeleted">,
+  | "width"
+  | "height"
+  | "angle"
+  | "groupIds"
+  | "seed"
+  | "version"
+  | "versionNonce"
+>;
 
-function _newElementBase<T extends ExcalidrawElement>(
+const _newElementBase = <T extends ExcalidrawElement>(
   type: T["type"],
   {
     x,
@@ -31,80 +34,91 @@ function _newElementBase<T extends ExcalidrawElement>(
     backgroundColor,
     fillStyle,
     strokeWidth,
+    strokeStyle,
     roughness,
     opacity,
     width = 0,
     height = 0,
+    angle = 0,
+    groupIds = [],
     ...rest
-  }: ElementConstructorOpts & Partial<ExcalidrawGenericElement>,
-) {
-  return {
-    id: rest.id || nanoid(),
-    type,
-    x,
-    y,
-    width,
-    height,
-    strokeColor,
-    backgroundColor,
-    fillStyle,
-    strokeWidth,
-    roughness,
-    opacity,
-    seed: rest.seed ?? randomSeed(),
-    version: rest.version || 1,
-    versionNonce: rest.versionNonce ?? 0,
-    isDeleted: rest.isDeleted ?? false,
-  };
-}
+  }: ElementConstructorOpts & Omit<Partial<ExcalidrawGenericElement>, "type">,
+) => ({
+  id: rest.id || randomId(),
+  type,
+  x,
+  y,
+  width,
+  height,
+  angle,
+  strokeColor,
+  backgroundColor,
+  fillStyle,
+  strokeWidth,
+  strokeStyle,
+  roughness,
+  opacity,
+  groupIds,
+  seed: rest.seed ?? randomInteger(),
+  version: rest.version || 1,
+  versionNonce: rest.versionNonce ?? 0,
+  isDeleted: false as false,
+});
 
-export function newElement(
+export const newElement = (
   opts: {
     type: ExcalidrawGenericElement["type"];
   } & ElementConstructorOpts,
-): ExcalidrawGenericElement {
-  return _newElementBase<ExcalidrawGenericElement>(opts.type, opts);
-}
+): NonDeleted<ExcalidrawGenericElement> =>
+  _newElementBase<ExcalidrawGenericElement>(opts.type, opts);
 
-export function newTextElement(
+export const newTextElement = (
   opts: {
     text: string;
-    font: string;
+    fontSize: number;
+    fontFamily: FontFamily;
+    textAlign: TextAlign;
   } & ElementConstructorOpts,
-): ExcalidrawTextElement {
-  const { text, font } = opts;
-  const metrics = measureText(text, font);
-  const textElement = {
-    ..._newElementBase<ExcalidrawTextElement>("text", opts),
-    text: text,
-    font: font,
-    // Center the text
-    x: opts.x - metrics.width / 2,
-    y: opts.y - metrics.height / 2,
-    width: metrics.width,
-    height: metrics.height,
-    baseline: metrics.baseline,
-  };
+): NonDeleted<ExcalidrawTextElement> => {
+  const metrics = measureText(opts.text, getFontString(opts));
+  const textElement = newElementWith(
+    {
+      ..._newElementBase<ExcalidrawTextElement>("text", opts),
+      text: opts.text,
+      fontSize: opts.fontSize,
+      fontFamily: opts.fontFamily,
+      textAlign: opts.textAlign,
+      // Center the text
+      x: opts.x - metrics.width / 2,
+      y: opts.y - metrics.height / 2,
+      width: metrics.width,
+      height: metrics.height,
+      baseline: metrics.baseline,
+    },
+    {},
+  );
 
   return textElement;
-}
+};
 
-export function newLinearElement(
+export const newLinearElement = (
   opts: {
-    type: "arrow" | "line";
+    type: ExcalidrawLinearElement["type"];
+    lastCommittedPoint?: ExcalidrawLinearElement["lastCommittedPoint"];
   } & ElementConstructorOpts,
-): ExcalidrawLinearElement {
+): NonDeleted<ExcalidrawLinearElement> => {
   return {
     ..._newElementBase<ExcalidrawLinearElement>(opts.type, opts),
     points: [],
+    lastCommittedPoint: opts.lastCommittedPoint || null,
   };
-}
+};
 
 // Simplified deep clone for the purpose of cloning ExcalidrawElement only
 //  (doesn't clone Date, RegExp, Map, Set, Typed arrays etc.)
 //
 // Adapted from https://github.com/lukeed/klona
-function _duplicateElement(val: any, depth: number = 0) {
+export const deepCopyElement = (val: any, depth: number = 0) => {
   if (val == null || typeof val !== "object") {
     return val;
   }
@@ -120,7 +134,7 @@ function _duplicateElement(val: any, depth: number = 0) {
         if (depth === 0 && (key === "shape" || key === "canvas")) {
           continue;
         }
-        tmp[key] = _duplicateElement(val[key], depth + 1);
+        tmp[key] = deepCopyElement(val[key], depth + 1);
       }
     }
     return tmp;
@@ -130,23 +144,49 @@ function _duplicateElement(val: any, depth: number = 0) {
     let k = val.length;
     const arr = new Array(k);
     while (k--) {
-      arr[k] = _duplicateElement(val[k], depth + 1);
+      arr[k] = deepCopyElement(val[k], depth + 1);
     }
     return arr;
   }
 
   return val;
-}
+};
 
-export function duplicateElement<TElement extends Mutable<ExcalidrawElement>>(
+/**
+ * Duplicate an element, often used in the alt-drag operation.
+ * Note that this method has gotten a bit complicated since the
+ * introduction of gruoping/ungrouping elements.
+ * @param editingGroupId The current group being edited. The new
+ *                       element will inherit this group and its
+ *                       parents.
+ * @param groupIdMapForOperation A Map that maps old group IDs to
+ *                               duplicated ones. If you are duplicating
+ *                               multiple elements at once, share this map
+ *                               amongst all of them
+ * @param element Element to duplicate
+ * @param overrides Any element properties to override
+ */
+export const duplicateElement = <TElement extends Mutable<ExcalidrawElement>>(
+  editingGroupId: AppState["editingGroupId"],
+  groupIdMapForOperation: Map<GroupId, GroupId>,
   element: TElement,
   overrides?: Partial<TElement>,
-): TElement {
-  let copy: TElement = _duplicateElement(element);
-  copy.id = nanoid();
-  copy.seed = randomSeed();
+): TElement => {
+  let copy: TElement = deepCopyElement(element);
+  copy.id = randomId();
+  copy.seed = randomInteger();
+  copy.groupIds = getNewGroupIdsForDuplication(
+    copy.groupIds,
+    editingGroupId,
+    (groupId) => {
+      if (!groupIdMapForOperation.has(groupId)) {
+        groupIdMapForOperation.set(groupId, randomId());
+      }
+      return groupIdMapForOperation.get(groupId)!;
+    },
+  );
   if (overrides) {
     copy = Object.assign(copy, overrides);
   }
   return copy;
-}
+};

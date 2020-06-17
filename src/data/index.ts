@@ -1,4 +1,7 @@
-import { ExcalidrawElement } from "../element/types";
+import {
+  ExcalidrawElement,
+  NonDeletedExcalidrawElement,
+} from "../element/types";
 
 import { getDefaultAppState } from "../appState";
 
@@ -7,13 +10,15 @@ import { exportToCanvas, exportToSvg } from "../scene/export";
 import { fileSave } from "browser-nativefs";
 
 import { t } from "../i18n";
-import { copyCanvasToClipboardAsPng } from "../clipboard";
+import {
+  copyCanvasToClipboardAsPng,
+  copyCanvasToClipboardAsSvg,
+} from "../clipboard";
 import { serializeAsJSON } from "./json";
 
 import { ExportType } from "../scene/types";
 import { restore } from "./restore";
 import { restoreFromLocalStorage } from "./localStorage";
-import { hasNonDeletedElements } from "../element";
 
 export { loadFromBlob } from "./blob";
 export { saveAsJSON, loadFromJSON } from "./json";
@@ -32,6 +37,12 @@ export type EncryptedData = {
 };
 
 export type SocketUpdateDataSource = {
+  SCENE_INIT: {
+    type: "SCENE_INIT";
+    payload: {
+      elements: readonly ExcalidrawElement[];
+    };
+  };
   SCENE_UPDATE: {
     type: "SCENE_UPDATE";
     payload: {
@@ -43,6 +54,9 @@ export type SocketUpdateDataSource = {
     payload: {
       socketID: string;
       pointerCoords: { x: number; y: number };
+      button: "down" | "up";
+      selectedElementIds: AppState["selectedElementIds"];
+      username: string;
     };
   };
 };
@@ -58,17 +72,15 @@ export type SocketUpdateDataIncoming =
 // part of `AppState`.
 (window as any).handle = null;
 
-function byteToHex(byte: number): string {
-  return `0${byte.toString(16)}`.slice(-2);
-}
+const byteToHex = (byte: number): string => `0${byte.toString(16)}`.slice(-2);
 
-async function generateRandomID() {
+const generateRandomID = async () => {
   const arr = new Uint8Array(10);
   window.crypto.getRandomValues(arr);
   return Array.from(arr, byteToHex).join("");
-}
+};
 
-async function generateEncryptionKey() {
+const generateEncryptionKey = async () => {
   const key = await window.crypto.subtle.generateKey(
     {
       name: "AES-GCM",
@@ -78,29 +90,29 @@ async function generateEncryptionKey() {
     ["encrypt", "decrypt"],
   );
   return (await window.crypto.subtle.exportKey("jwk", key)).k;
-}
+};
 
-function createIV() {
+const createIV = () => {
   const arr = new Uint8Array(12);
   return window.crypto.getRandomValues(arr);
-}
+};
 
-export function getCollaborationLinkData(link: string) {
+export const getCollaborationLinkData = (link: string) => {
   if (link.length === 0) {
     return;
   }
   const hash = new URL(link).hash;
   return hash.match(/^#room=([a-zA-Z0-9_-]+),([a-zA-Z0-9_-]+)$/);
-}
+};
 
-export async function generateCollaborationLink() {
+export const generateCollaborationLink = async () => {
   const id = await generateRandomID();
   const key = await generateEncryptionKey();
-  return `${window.location.origin}#room=${id},${key}`;
-}
+  return `${window.location.origin}${window.location.pathname}#room=${id},${key}`;
+};
 
-async function getImportedKey(key: string, usage: string): Promise<CryptoKey> {
-  return await window.crypto.subtle.importKey(
+const getImportedKey = (key: string, usage: KeyUsage) =>
+  window.crypto.subtle.importKey(
     "jwk",
     {
       alg: "A128GCM",
@@ -116,12 +128,11 @@ async function getImportedKey(key: string, usage: string): Promise<CryptoKey> {
     false, // extractable
     [usage],
   );
-}
 
-export async function encryptAESGEM(
+export const encryptAESGEM = async (
   data: Uint8Array,
   key: string,
-): Promise<EncryptedData> {
+): Promise<EncryptedData> => {
   const importedKey = await getImportedKey(key, "encrypt");
   const iv = createIV();
   return {
@@ -135,13 +146,13 @@ export async function encryptAESGEM(
     ),
     iv,
   };
-}
+};
 
-export async function decryptAESGEM(
+export const decryptAESGEM = async (
   data: ArrayBuffer,
   key: string,
   iv: Uint8Array,
-): Promise<SocketUpdateDataIncoming> {
+): Promise<SocketUpdateDataIncoming> => {
   try {
     const importedKey = await getImportedKey(key, "decrypt");
     const decrypted = await window.crypto.subtle.decrypt(
@@ -164,12 +175,12 @@ export async function decryptAESGEM(
   return {
     type: "INVALID_RESPONSE",
   };
-}
+};
 
-export async function exportToBackend(
+export const exportToBackend = async (
   elements: readonly ExcalidrawElement[],
   appState: AppState,
-) {
+) => {
   const json = serializeAsJSON(elements, appState);
   const encoded = new TextEncoder().encode(json);
 
@@ -219,12 +230,12 @@ export async function exportToBackend(
     console.error(error);
     window.alert(t("alerts.couldNotCreateShareableLink"));
   }
-}
+};
 
-export async function importFromBackend(
+export const importFromBackend = async (
   id: string | null,
   privateKey: string | undefined,
-) {
+) => {
   let elements: readonly ExcalidrawElement[] = [];
   let appState: AppState = getDefaultAppState();
 
@@ -260,18 +271,18 @@ export async function importFromBackend(
     }
 
     elements = data.elements || elements;
-    appState = data.appState || appState;
+    appState = { ...appState, ...data.appState };
   } catch (error) {
     window.alert(t("alerts.importBackendFailed"));
     console.error(error);
   } finally {
     return restore(elements, appState, { scrollToContent: true });
   }
-}
+};
 
-export async function exportCanvas(
+export const exportCanvas = async (
   type: ExportType,
-  elements: readonly ExcalidrawElement[],
+  elements: readonly NonDeletedExcalidrawElement[],
   appState: AppState,
   canvas: HTMLCanvasElement,
   {
@@ -280,29 +291,35 @@ export async function exportCanvas(
     viewBackgroundColor,
     name,
     scale = 1,
+    shouldAddWatermark,
   }: {
     exportBackground: boolean;
     exportPadding?: number;
     viewBackgroundColor: string;
     name: string;
     scale?: number;
+    shouldAddWatermark: boolean;
   },
-) {
-  if (!hasNonDeletedElements(elements)) {
+) => {
+  if (elements.length === 0) {
     return window.alert(t("alerts.cannotExportEmptyCanvas"));
   }
-  // calculate smallest area to fit the contents in
-
-  if (type === "svg") {
+  if (type === "svg" || type === "clipboard-svg") {
     const tempSvg = exportToSvg(elements, {
       exportBackground,
       viewBackgroundColor,
       exportPadding,
+      shouldAddWatermark,
     });
-    await fileSave(new Blob([tempSvg.outerHTML], { type: "image/svg+xml" }), {
-      fileName: `${name}.svg`,
-    });
-    return;
+    if (type === "svg") {
+      await fileSave(new Blob([tempSvg.outerHTML], { type: "image/svg+xml" }), {
+        fileName: `${name}.svg`,
+      });
+      return;
+    } else if (type === "clipboard-svg") {
+      copyCanvasToClipboardAsSvg(tempSvg);
+      return;
+    }
   }
 
   const tempCanvas = exportToCanvas(elements, appState, {
@@ -310,6 +327,7 @@ export async function exportCanvas(
     viewBackgroundColor,
     exportPadding,
     scale,
+    shouldAddWatermark,
   });
   tempCanvas.style.display = "none";
   document.body.appendChild(tempCanvas);
@@ -341,9 +359,9 @@ export async function exportCanvas(
   if (tempCanvas !== canvas) {
     tempCanvas.remove();
   }
-}
+};
 
-export async function loadScene(id: string | null, privateKey?: string) {
+export const loadScene = async (id: string | null, privateKey?: string) => {
   let data;
   if (id != null) {
     // the private key is used to decrypt the content from the server, take
@@ -357,5 +375,6 @@ export async function loadScene(id: string | null, privateKey?: string) {
   return {
     elements: data.elements,
     appState: data.appState && { ...data.appState },
+    commitToHistory: false,
   };
-}
+};

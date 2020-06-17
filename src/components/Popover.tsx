@@ -6,17 +6,17 @@ type Props = {
   top?: number;
   left?: number;
   children?: React.ReactNode;
-  onCloseRequest?(): void;
+  onCloseRequest?(event: PointerEvent): void;
   fitInViewport?: boolean;
 };
 
-export function Popover({
+export const Popover = ({
   children,
   left,
   top,
   onCloseRequest,
   fitInViewport = false,
-}: Props) {
+}: Props) => {
   const popoverRef = useRef<HTMLDivElement>(null);
 
   // ensure the popover doesn't overflow the viewport
@@ -38,9 +38,9 @@ export function Popover({
 
   useEffect(() => {
     if (onCloseRequest) {
-      const handler = (e: Event) => {
-        if (!popoverRef.current?.contains(e.target as Node)) {
-          unstable_batchedUpdates(() => onCloseRequest());
+      const handler = (event: PointerEvent) => {
+        if (!popoverRef.current?.contains(event.target as Node)) {
+          unstable_batchedUpdates(() => onCloseRequest(event));
         }
       };
       document.addEventListener("pointerdown", handler, false);
@@ -53,4 +53,4 @@ export function Popover({
       {children}
     </div>
   );
-}
+};

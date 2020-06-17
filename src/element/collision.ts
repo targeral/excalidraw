@@ -1,38 +1,56 @@
-import { distanceBetweenPointAndSegment } from "../math";
+import {
+  distanceBetweenPointAndSegment,
+  isPathALoop,
+  rotate,
+  isPointInPolygon,
+} from "../math";
+import { pointsOnBezierCurves } from "points-on-curve";
 
-import { ExcalidrawElement } from "./types";
+import { NonDeletedExcalidrawElement } from "./types";
 
 import {
   getDiamondPoints,
   getElementAbsoluteCoords,
-  getLinearElementAbsoluteBounds,
+  getCurvePathOps,
 } from "./bounds";
 import { Point } from "../types";
-import { Drawable, OpSet } from "roughjs/bin/core";
+import { Drawable } from "roughjs/bin/core";
 import { AppState } from "../types";
 import { getShapeForElement } from "../renderer/renderElement";
 import { isLinearElement } from "./typeChecks";
 
-function isElementDraggableFromInside(
-  element: ExcalidrawElement,
+const isElementDraggableFromInside = (
+  element: NonDeletedExcalidrawElement,
   appState: AppState,
-): boolean {
-  return (
+): boolean => {
+  if (element.type === "arrow") {
+    return false;
+  }
+  const dragFromInside =
     element.backgroundColor !== "transparent" ||
-    appState.selectedElementIds[element.id]
-  );
-}
+    appState.selectedElementIds[element.id];
+  if (element.type === "line" || element.type === "draw") {
+    return dragFromInside && isPathALoop(element.points);
+  }
+  return dragFromInside;
+};
 
-export function hitTest(
-  element: ExcalidrawElement,
+export const hitTest = (
+  element: NonDeletedExcalidrawElement,
   appState: AppState,
   x: number,
   y: number,
   zoom: number,
-): boolean {
+): boolean => {
   // For shapes that are composed of lines, we only enable point-selection when the distance
   // of the click is less than x pixels of any of the lines that the shape is composed of
   const lineThreshold = 10 / zoom;
+
+  const [x1, y1, x2, y2] = getElementAbsoluteCoords(element);
+  const cx = (x1 + x2) / 2;
+  const cy = (y1 + y2) / 2;
+  // reverse rotate the pointer
+  [x, y] = rotate(x, y, cx, cy, -element.angle);
 
   if (element.type === "ellipse") {
     // https://stackoverflow.com/a/46007540/232122
@@ -45,7 +63,7 @@ export function hitTest(
     const a = Math.abs(element.width) / 2;
     const b = Math.abs(element.height) / 2;
 
-    [0, 1, 2, 3].forEach(x => {
+    [0, 1, 2, 3].forEach((x) => {
       const xx = a * tx;
       const yy = b * ty;
 
@@ -75,8 +93,6 @@ export function hitTest(
     }
     return Math.hypot(a * tx - px, b * ty - py) < lineThreshold;
   } else if (element.type === "rectangle") {
-    const [x1, y1, x2, y2] = getElementAbsoluteCoords(element);
-
     if (isElementDraggableFromInside(element, appState)) {
       return (
         x > x1 - lineThreshold &&
@@ -165,7 +181,6 @@ export function hitTest(
     }
     const shape = getShapeForElement(element) as Drawable[];
 
-    const [x1, y1, x2, y2] = getLinearElementAbsoluteBounds(element);
     if (
       x < x1 - lineThreshold ||
       y < y1 - lineThreshold ||
@@ -178,20 +193,27 @@ export function hitTest(
     const relX = x - element.x;
     const relY = y - element.y;
 
+    if (isElementDraggableFromInside(element, appState)) {
+      const hit = shape.some((subshape) =>
+        hitTestCurveInside(subshape, relX, relY, lineThreshold),
+      );
+      if (hit) {
+        return true;
+      }
+    }
+
     // hit thest all "subshapes" of the linear element
-    return shape.some(subshape =>
-      hitTestRoughShape(subshape.sets, relX, relY, lineThreshold),
+    return shape.some((subshape) =>
+      hitTestRoughShape(subshape, relX, relY, lineThreshold),
     );
   } else if (element.type === "text") {
-    const [x1, y1, x2, y2] = getElementAbsoluteCoords(element);
-
     return x >= x1 && x <= x2 && y >= y1 && y <= y2;
   } else if (element.type === "selection") {
     console.warn("This should not happen, we need to investigate why it does.");
     return false;
   }
   throw new Error(`Unimplemented type ${element.type}`);
-}
+};
 
 const pointInBezierEquation = (
   p0: Point,
@@ -226,14 +248,41 @@ const pointInBezierEquation = (
   return false;
 };
 
+const hitTestCurveInside = (
+  drawable: Drawable,
+  x: number,
+  y: number,
+  lineThreshold: number,
+) => {
+  const ops = getCurvePathOps(drawable);
+  const points: Point[] = [];
+  for (const operation of ops) {
+    if (operation.op === "move") {
+      if (points.length) {
+        break;
+      }
+      points.push([operation.data[0], operation.data[1]]);
+    } else if (operation.op === "bcurveTo") {
+      points.push([operation.data[0], operation.data[1]]);
+      points.push([operation.data[2], operation.data[3]]);
+      points.push([operation.data[4], operation.data[5]]);
+    }
+  }
+  if (points.length >= 4) {
+    const polygonPoints = pointsOnBezierCurves(points as any, 10, 5);
+    return isPointInPolygon(polygonPoints, x, y);
+  }
+  return false;
+};
+
 const hitTestRoughShape = (
-  opSet: OpSet[],
+  drawable: Drawable,
   x: number,
   y: number,
   lineThreshold: number,
 ) => {
   // read operations from first opSet
-  const ops = opSet[0].ops;
+  const ops = getCurvePathOps(drawable);
 
   // set start position as (0,0) just in case
   // move operation does not exist (unlikely but it is worth safekeeping it)

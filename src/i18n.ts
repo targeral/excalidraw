@@ -2,32 +2,60 @@ import LanguageDetector from "i18next-browser-languagedetector";
 
 export const languages = [
   { lng: "en", label: "English", data: require("./locales/en.json") },
-  { lng: "de", label: "Deutsch", data: require("./locales/de.json") },
-  { lng: "es", label: "Español", data: require("./locales/es.json") },
-  { lng: "fr", label: "Français", data: require("./locales/fr.json") },
-  { lng: "id", label: "Bahasa Indonesia", data: require("./locales/id.json") },
-  { lng: "no", label: "Norsk", data: require("./locales/no.json") },
-  { lng: "pl", label: "Polski", data: require("./locales/pl.json") },
-  { lng: "pt", label: "Português", data: require("./locales/pt.json") },
-  { lng: "ru", label: "Русский", data: require("./locales/ru.json") },
-  { lng: "tr", label: "Türkçe", data: require("./locales/tr.json") },
+  { lng: "bg-BG", label: "Български", data: require("./locales/bg-BG.json") },
+  { lng: "de-DE", label: "Deutsch", data: require("./locales/de-DE.json") },
+  { lng: "es-ES", label: "Español", data: require("./locales/es-ES.json") },
+  { lng: "ca-ES", label: "Catalan", data: require("./locales/ca-ES.json") },
+  { lng: "el-GR", label: "Ελληνικά", data: require("./locales/el-GR.json") },
+  { lng: "fr-FR", label: "Français", data: require("./locales/fr-FR.json") },
+  {
+    lng: "id-ID",
+    label: "Bahasa Indonesia",
+    data: require("./locales/id-ID.json"),
+  },
+  { lng: "it-IT", label: "Italiano", data: require("./locales/it-IT.json") },
+  { lng: "hu-HU", label: "Magyar", data: require("./locales/hu-HU.json") },
+  { lng: "nl-NL", label: "Nederlands", data: require("./locales/nl-NL.json") },
+  { lng: "no-No", label: "Norsk", data: require("./locales/no-NO.json") },
+  { lng: "pl-PL", label: "Polski", data: require("./locales/pl-PL.json") },
+  { lng: "pt-PT", label: "Português", data: require("./locales/pt-PT.json") },
+  { lng: "ru-RU", label: "Русский", data: require("./locales/ru-RU.json") },
+  { lng: "uk-UA", label: "Українська", data: require("./locales/uk-UA.json") },
+  { lng: "fi-FI", label: "Suomi", data: require("./locales/fi-FI.json") },
+  { lng: "tr-TR", label: "Türkçe", data: require("./locales/tr-TR.json") },
+  { lng: "ja-JP", label: "日本語", data: require("./locales/ja-JP.json") },
+  { lng: "ko-KR", label: "한국어", data: require("./locales/ko-KR.json") },
+  { lng: "zh-TW", label: "繁體中文", data: require("./locales/zh-TW.json") },
+  { lng: "zh-CN", label: "简体中文", data: require("./locales/zh-CN.json") },
+  {
+    lng: "ar-SA",
+    label: "العربية",
+    data: require("./locales/ar-SA.json"),
+    rtl: true,
+  },
+  {
+    lng: "he-IL",
+    label: "עברית",
+    data: require("./locales/he-IL.json"),
+    rtl: true,
+  },
 ];
 
 let currentLanguage = languages[0];
 const fallbackLanguage = languages[0];
 
-export function setLanguage(newLng: string | undefined) {
+export const setLanguage = (newLng: string | undefined) => {
   currentLanguage =
-    languages.find(language => language.lng === newLng) || fallbackLanguage;
+    languages.find((language) => language.lng === newLng) || fallbackLanguage;
+
+  document.documentElement.dir = currentLanguage.rtl ? "rtl" : "ltr";
 
   languageDetector.cacheUserLanguage(currentLanguage.lng);
-}
+};
 
-export function getLanguage() {
-  return currentLanguage.lng;
-}
+export const getLanguage = () => currentLanguage;
 
-function findPartsForData(data: any, parts: string[]) {
+const findPartsForData = (data: any, parts: string[]) => {
   for (var i = 0; i < parts.length; ++i) {
     const part = parts[i];
     if (data[part] === undefined) {
@@ -39,9 +67,9 @@ function findPartsForData(data: any, parts: string[]) {
     return undefined;
   }
   return data;
-}
+};
 
-export function t(path: string, replacement?: { [key: string]: string }) {
+export const t = (path: string, replacement?: { [key: string]: string }) => {
   const parts = path.split(".");
   let translation =
     findPartsForData(currentLanguage.data, parts) ||
@@ -56,14 +84,12 @@ export function t(path: string, replacement?: { [key: string]: string }) {
     }
   }
   return translation;
-}
+};
 
 const languageDetector = new LanguageDetector();
 languageDetector.init({
   languageUtils: {
-    formatLanguageCode: function(lng: string) {
-      return lng;
-    },
+    formatLanguageCode: (lng: string) => lng,
     isWhitelisted: () => true,
   },
   checkWhitelist: false,

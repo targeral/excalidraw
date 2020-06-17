@@ -5,44 +5,48 @@ import { cleanAppStateForExport } from "../appState";
 import { fileOpen, fileSave } from "browser-nativefs";
 import { loadFromBlob } from "./blob";
 
-export function serializeAsJSON(
+export const serializeAsJSON = (
   elements: readonly ExcalidrawElement[],
   appState: AppState,
-): string {
-  return JSON.stringify(
+): string =>
+  JSON.stringify(
     {
       type: "excalidraw",
-      version: 1,
+      version: 2,
       source: window.location.origin,
-      elements: elements.filter(element => !element.isDeleted),
+      elements: elements.filter((element) => !element.isDeleted),
       appState: cleanAppStateForExport(appState),
     },
     null,
     2,
   );
-}
 
-export async function saveAsJSON(
+export const saveAsJSON = async (
   elements: readonly ExcalidrawElement[],
   appState: AppState,
-) {
+  fileHandle: any,
+) => {
   const serialized = serializeAsJSON(elements, appState);
-
+  const blob = new Blob([serialized], {
+    type: "application/json",
+  });
   const name = `${appState.name}.excalidraw`;
-  await fileSave(
-    new Blob([serialized], { type: "application/json" }),
+  (window as any).handle = await fileSave(
+    blob,
     {
       fileName: name,
       description: "Excalidraw file",
+      extensions: ["excalidraw"],
     },
-    (window as any).handle,
+    fileHandle || null,
   );
-}
-export async function loadFromJSON() {
+};
+
+export const loadFromJSON = async () => {
   const blob = await fileOpen({
     description: "Excalidraw files",
     extensions: ["json", "excalidraw"],
     mimeTypes: ["application/json"],
   });
   return loadFromBlob(blob);
-}
+};

@@ -1,11 +1,29 @@
 import React from "react";
 import { Popover } from "./Popover";
 
-import "./ColorPicker.css";
+import "./ColorPicker.scss";
 import { KEYS } from "../keys";
-import { t } from "../i18n";
+import { t, getLanguage } from "../i18n";
 import { isWritableElement } from "../utils";
 import colors from "../colors";
+
+const isValidColor = (color: string) => {
+  const style = new Option().style;
+  style.color = color;
+  return !!style.color;
+};
+
+const getColor = (color: string): string | null => {
+  if (color === "transparent") {
+    return color;
+  }
+
+  return isValidColor(color)
+    ? color
+    : isValidColor(`#${color}`)
+    ? `#${color}`
+    : null;
+};
 
 // This is a narrow reimplementation of the awesome react-color Twitter component
 // https://github.com/casesandberg/react-color/blob/master/src/components/twitter/Twitter.js
@@ -18,7 +36,7 @@ const keyBindings = [
   ["a", "s", "d", "f", "g"],
 ].flat();
 
-const Picker = function({
+const Picker = ({
   colors,
   color,
   onChange,
@@ -32,7 +50,7 @@ const Picker = function({
   onClose: () => void;
   label: string;
   showInput: boolean;
-}) {
+}) => {
   const firstItem = React.useRef<HTMLButtonElement>();
   const activeItem = React.useRef<HTMLButtonElement>();
   const gallery = React.useRef<HTMLDivElement>();
@@ -69,6 +87,7 @@ const Picker = function({
       event.key === KEYS.ARROW_DOWN
     ) {
       const { activeElement } = document;
+      const isRTL = getLanguage().rtl;
       const index = Array.prototype.indexOf.call(
         gallery!.current!.children,
         activeElement,
@@ -76,9 +95,9 @@ const Picker = function({
       if (index !== -1) {
         const length = gallery!.current!.children.length - (showInput ? 1 : 0);
         const nextIndex =
-          event.key === KEYS.ARROW_RIGHT
+          event.key === (isRTL ? KEYS.ARROW_LEFT : KEYS.ARROW_RIGHT)
             ? (index + 1) % length
-            : event.key === KEYS.ARROW_LEFT
+            : event.key === (isRTL ? KEYS.ARROW_RIGHT : KEYS.ARROW_LEFT)
             ? (length + index - 1) % length
             : event.key === KEYS.ARROW_DOWN
             ? (index + 5) % length
@@ -114,7 +133,7 @@ const Picker = function({
       <div className="color-picker-triangle"></div>
       <div
         className="color-picker-content"
-        ref={el => {
+        ref={(el) => {
           if (el) {
             gallery.current = el;
           }
@@ -123,15 +142,16 @@ const Picker = function({
         {colors.map((_color, i) => (
           <button
             className="color-picker-swatch"
-            onClick={() => {
+            onClick={(event) => {
+              (event.currentTarget as HTMLButtonElement).focus();
               onChange(_color);
             }}
             title={`${_color} — ${keyBindings[i].toUpperCase()}`}
             aria-label={_color}
             aria-keyshortcuts={keyBindings[i]}
-            style={{ backgroundColor: _color }}
+            style={{ color: _color }}
             key={_color}
-            ref={el => {
+            ref={(el) => {
               if (el && i === 0) {
                 firstItem.current = el;
               }
@@ -145,9 +165,7 @@ const Picker = function({
           >
             {_color === "transparent" ? (
               <div className="color-picker-transparent"></div>
-            ) : (
-              undefined
-            )}
+            ) : undefined}
             <span className="color-picker-keybinding">{keyBindings[i]}</span>
           </button>
         ))}
@@ -155,7 +173,7 @@ const Picker = function({
           <ColorInput
             color={color}
             label={label}
-            onChange={color => {
+            onChange={(color) => {
               onChange(color);
             }}
             ref={colorInput}
@@ -179,7 +197,6 @@ const ColorInput = React.forwardRef(
     },
     ref,
   ) => {
-    const colorRegex = /^([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8}|transparent)$/;
     const [innerValue, setInnerValue] = React.useState(color);
     const inputRef = React.useRef(null);
 
@@ -189,6 +206,18 @@ const ColorInput = React.forwardRef(
 
     React.useImperativeHandle(ref, () => inputRef.current);
 
+    const changeColor = React.useCallback(
+      (inputValue: string) => {
+        const value = inputValue.toLowerCase();
+        const color = getColor(value);
+        if (color) {
+          onChange(color);
+        }
+        setInnerValue(value);
+      },
+      [onChange],
+    );
+
     return (
       <label className="color-input-container">
         <div className="color-picker-hash">#</div>
@@ -196,15 +225,8 @@ const ColorInput = React.forwardRef(
           spellCheck={false}
           className="color-picker-input"
           aria-label={label}
-          onChange={event => {
-            const value = event.target.value.toLowerCase();
-            if (value.match(colorRegex)) {
-              onChange(value === "transparent" ? "transparent" : `#${value}`);
-            }
-            setInnerValue(value);
-          }}
+          onChange={(event) => changeColor(event.target.value)}
           value={(innerValue || "").replace(/^#/, "")}
-          onPaste={event => onChange(event.clipboardData.getData("text"))}
           onBlur={() => setInnerValue(color)}
           ref={inputRef}
         />
@@ -213,7 +235,7 @@ const ColorInput = React.forwardRef(
   },
 );
 
-export function ColorPicker({
+export const ColorPicker = ({
   type,
   color,
   onChange,
@@ -223,7 +245,7 @@ export function ColorPicker({
   color: string | null;
   onChange: (color: string) => void;
   label: string;
-}) {
+}) => {
   const [isActive, setActive] = React.useState(false);
   const pickerButton = React.useRef<HTMLButtonElement>(null);
 
@@ -244,18 +266,22 @@ export function ColorPicker({
         <ColorInput
           color={color}
           label={label}
-          onChange={color => {
+          onChange={(color) => {
             onChange(color);
           }}
         />
       </div>
       <React.Suspense fallback="">
         {isActive ? (
-          <Popover onCloseRequest={() => setActive(false)}>
+          <Popover
+            onCloseRequest={(event) =>
+              event.target !== pickerButton.current && setActive(false)
+            }
+          >
             <Picker
               colors={colors[type]}
               color={color || null}
-              onChange={changedColor => {
+              onChange={(changedColor) => {
                 onChange(changedColor);
               }}
               onClose={() => {
@@ -270,4 +296,4 @@ export function ColorPicker({
       </React.Suspense>
     </div>
   );
-}
+};

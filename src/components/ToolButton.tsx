@@ -8,6 +8,7 @@ type ToolButtonBaseProps = {
   icon?: React.ReactNode;
   "aria-label": string;
   "aria-keyshortcuts"?: string;
+  "data-testid"?: string;
   label?: string;
   title?: string;
   name?: string;
@@ -15,6 +16,7 @@ type ToolButtonBaseProps = {
   size?: ToolIconSize;
   keyBindingLabel?: string;
   showAriaLabel?: boolean;
+  hidden?: boolean;
   visible?: boolean;
   selected?: boolean;
   className?: string;
@@ -35,10 +37,7 @@ type ToolButtonProps =
 
 const DEFAULT_SIZE: ToolIconSize = "m";
 
-export const ToolButton = React.forwardRef(function(
-  props: ToolButtonProps,
-  ref,
-) {
+export const ToolButton = React.forwardRef((props: ToolButtonProps, ref) => {
   const innerRef = React.useRef(null);
   React.useImperativeHandle(ref, () => innerRef.current);
   const sizeCn = `ToolIcon_size_${props.size || DEFAULT_SIZE}`;
@@ -46,18 +45,21 @@ export const ToolButton = React.forwardRef(function(
   if (props.type === "button") {
     return (
       <button
-        className={`ToolIcon_type_button ToolIcon ${sizeCn}${
-          props.selected ? " ToolIcon--selected" : ""
-        } ${props.className || ""}`}
+        className={`ToolIcon_type_button ${
+          !props.hidden ? "ToolIcon" : ""
+        } ${sizeCn}${props.selected ? " ToolIcon--selected" : ""} ${
+          props.className
+        } ${
+          props.visible && !props.hidden
+            ? "ToolIcon_type_button--show"
+            : "ToolIcon_type_button--hide"
+        }`}
+        hidden={props.hidden}
         title={props.title}
         aria-label={props["aria-label"]}
         type="button"
         onClick={props.onClick}
         ref={innerRef}
-        style={{
-          visibility:
-            props.visible || props.visible == null ? "visible" : "hidden",
-        }}
       >
         <div className="ToolIcon__icon" aria-hidden="true">
           {props.icon || props.label}
@@ -78,6 +80,7 @@ export const ToolButton = React.forwardRef(function(
         name={props.name}
         aria-label={props["aria-label"]}
         aria-keyshortcuts={props["aria-keyshortcuts"]}
+        data-testid={props["data-testid"]}
         id={props.id}
         onChange={props.onChange}
         checked={props.checked}
@@ -92,3 +95,8 @@ export const ToolButton = React.forwardRef(function(
     </label>
   );
 });
+
+ToolButton.defaultProps = {
+  visible: true,
+  className: "",
+};

@@ -4,28 +4,32 @@ import {
   ActionsManagerInterface,
   UpdaterFn,
   ActionFilterFn,
+  ActionName,
 } from "./types";
 import { ExcalidrawElement } from "../element/types";
 import { AppState } from "../types";
 import { t } from "../i18n";
+import { globalSceneState } from "../scene";
 
 export class ActionManager implements ActionsManagerInterface {
-  actions: { [keyProp: string]: Action } = {};
+  actions = {} as ActionsManagerInterface["actions"];
 
   updater: UpdaterFn;
 
   getAppState: () => AppState;
 
-  getElements: () => readonly ExcalidrawElement[];
+  getElementsIncludingDeleted: () => readonly ExcalidrawElement[];
 
   constructor(
     updater: UpdaterFn,
     getAppState: () => AppState,
-    getElements: () => readonly ExcalidrawElement[],
+    getElementsIncludingDeleted: () => ReturnType<
+      typeof globalSceneState["getElementsIncludingDeleted"]
+    >,
   ) {
     this.updater = updater;
     this.getAppState = getAppState;
-    this.getElements = getElements;
+    this.getElementsIncludingDeleted = getElementsIncludingDeleted;
   }
 
   registerAction(action: Action) {
@@ -33,16 +37,20 @@ export class ActionManager implements ActionsManagerInterface {
   }
 
   registerAll(actions: readonly Action[]) {
-    actions.forEach(action => this.registerAction(action));
+    actions.forEach((action) => this.registerAction(action));
   }
 
   handleKeyDown(event: KeyboardEvent) {
     const data = Object.values(this.actions)
       .sort((a, b) => (b.keyPriority || 0) - (a.keyPriority || 0))
       .filter(
-        action =>
+        (action) =>
           action.keyTest &&
-          action.keyTest(event, this.getAppState(), this.getElements()),
+          action.keyTest(
+            event,
+            this.getAppState(),
+            this.getElementsIncludingDeleted(),
+          ),
       );
 
     if (data.length === 0) {
@@ -50,56 +58,66 @@ export class ActionManager implements ActionsManagerInterface {
     }
 
     event.preventDefault();
-    const commitToHistory =
-      data[0].commitToHistory &&
-      data[0].commitToHistory(this.getAppState(), this.getElements());
     this.updater(
-      data[0].perform(this.getElements(), this.getAppState(), null),
-      commitToHistory,
+      data[0].perform(
+        this.getElementsIncludingDeleted(),
+        this.getAppState(),
+        null,
+      ),
     );
     return true;
   }
 
-  getContextMenuItems(actionFilter: ActionFilterFn = action => action) {
+  executeAction(action: Action) {
+    this.updater(
+      action.perform(
+        this.getElementsIncludingDeleted(),
+        this.getAppState(),
+        null,
+      ),
+    );
+  }
+
+  getContextMenuItems(actionFilter: ActionFilterFn = (action) => action) {
     return Object.values(this.actions)
       .filter(actionFilter)
-      .filter(action => "contextItemLabel" in action)
+      .filter((action) => "contextItemLabel" in action)
       .sort(
         (a, b) =>
           (a.contextMenuOrder !== undefined ? a.contextMenuOrder : 999) -
           (b.contextMenuOrder !== undefined ? b.contextMenuOrder : 999),
       )
-      .map(action => ({
+      .map((action) => ({
         label: action.contextItemLabel ? t(action.contextItemLabel) : "",
         action: () => {
-          const commitToHistory =
-            action.commitToHistory &&
-            action.commitToHistory(this.getAppState(), this.getElements());
           this.updater(
-            action.perform(this.getElements(), this.getAppState(), null),
-            commitToHistory,
+            action.perform(
+              this.getElementsIncludingDeleted(),
+              this.getAppState(),
+              null,
+            ),
           );
         },
       }));
   }
 
-  renderAction = (name: string) => {
+  renderAction = (name: ActionName) => {
     if (this.actions[name] && "PanelComponent" in this.actions[name]) {
       const action = this.actions[name];
       const PanelComponent = action.PanelComponent!;
       const updateData = (formState?: any) => {
-        const commitToHistory =
-          action.commitToHistory &&
-          action.commitToHistory(this.getAppState(), this.getElements());
         this.updater(
-          action.perform(this.getElements(), this.getAppState(), formState),
-          commitToHistory,
+          action.perform(
+            this.getElementsIncludingDeleted(),
+            this.getAppState(),
+            formState,
+          ),
         );
       };
 
       return (
         <PanelComponent
-          elements={this.getElements()}
+          elements={this.getElementsIncludingDeleted()}
           appState={this.getAppState()}
           updateData={updateData}
         />

@@ -1,8 +1,8 @@
 import { getDefaultAppState } from "../appState";
-import { DataState } from "./types";
 import { restore } from "./restore";
+import { t } from "../i18n";
 
-export async function loadFromBlob(blob: any) {
+export const loadFromBlob = async (blob: any) => {
   const updateAppState = (contents: string) => {
     const defaultAppState = getDefaultAppState();
     let elements = [];
@@ -10,12 +10,12 @@ export async function loadFromBlob(blob: any) {
     try {
       const data = JSON.parse(contents);
       if (data.type !== "excalidraw") {
-        throw new Error("Cannot load invalid json");
+        throw new Error(t("alerts.couldNotLoadInvalidFile"));
       }
       elements = data.elements || [];
       appState = { ...defaultAppState, ...data.appState };
     } catch {
-      // Do nothing because elements array is already empty
+      throw new Error(t("alerts.couldNotLoadInvalidFile"));
     }
     return { elements, appState };
   };
@@ -27,7 +27,7 @@ export async function loadFromBlob(blob: any) {
   if ("text" in Blob) {
     contents = await blob.text();
   } else {
-    contents = await new Promise(resolve => {
+    contents = await new Promise((resolve) => {
       const reader = new FileReader();
       reader.readAsText(blob, "utf8");
       reader.onloadend = () => {
@@ -37,11 +37,7 @@ export async function loadFromBlob(blob: any) {
       };
     });
   }
+
   const { elements, appState } = updateAppState(contents);
-  if (!elements.length) {
-    return Promise.reject("Cannot load invalid json");
-  }
-  return new Promise<DataState>(resolve => {
-    resolve(restore(elements, appState, { scrollToContent: true }));
-  });
-}
+  return restore(elements, appState, { scrollToContent: true });
+};

@@ -1,8 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { render, fireEvent } from "./test-utils";
-import { App } from "../components/App";
+import App from "../components/App";
 import * as Renderer from "../renderer/renderScene";
+import { reseed } from "../random";
 
 // Unmount ReactDOM from root
 ReactDOM.unmountComponentAtNode(document.getElementById("root")!);
@@ -11,9 +12,10 @@ const renderScene = jest.spyOn(Renderer, "renderScene");
 beforeEach(() => {
   localStorage.clear();
   renderScene.mockClear();
+  reseed(7);
 });
 
-const { __TEST__: h } = window;
+const { h } = window;
 
 describe("resize element", () => {
   it("rectangle", () => {
@@ -29,9 +31,9 @@ describe("resize element", () => {
       fireEvent.pointerUp(canvas);
 
       expect(renderScene).toHaveBeenCalledTimes(4);
-      expect(h.appState.selectionElement).toBeNull();
+      expect(h.state.selectionElement).toBeNull();
       expect(h.elements.length).toEqual(1);
-      expect(h.appState.selectedElementIds[h.elements[0].id]).toBeTruthy();
+      expect(h.state.selectedElementIds[h.elements[0].id]).toBeTruthy();
       expect([h.elements[0].x, h.elements[0].y]).toEqual([30, 20]);
 
       expect([h.elements[0].width, h.elements[0].height]).toEqual([30, 50]);
@@ -49,10 +51,12 @@ describe("resize element", () => {
     fireEvent.pointerUp(canvas);
 
     expect(renderScene).toHaveBeenCalledTimes(5);
-    expect(h.appState.selectionElement).toBeNull();
+    expect(h.state.selectionElement).toBeNull();
     expect(h.elements.length).toEqual(1);
     expect([h.elements[0].x, h.elements[0].y]).toEqual([29, 47]);
     expect([h.elements[0].width, h.elements[0].height]).toEqual([30, 50]);
+
+    h.elements.forEach((element) => expect(element).toMatchSnapshot());
   });
 });
 
@@ -70,9 +74,9 @@ describe("resize element with aspect ratio when SHIFT is clicked", () => {
       fireEvent.pointerUp(canvas);
 
       expect(renderScene).toHaveBeenCalledTimes(4);
-      expect(h.appState.selectionElement).toBeNull();
+      expect(h.state.selectionElement).toBeNull();
       expect(h.elements.length).toEqual(1);
-      expect(h.appState.selectedElementIds[h.elements[0].id]).toBeTruthy();
+      expect(h.state.selectedElementIds[h.elements[0].id]).toBeTruthy();
       expect([h.elements[0].x, h.elements[0].y]).toEqual([30, 20]);
       expect([h.elements[0].x, h.elements[0].y]).toEqual([30, 20]);
       expect([h.elements[0].width, h.elements[0].height]).toEqual([30, 50]);
@@ -90,9 +94,11 @@ describe("resize element with aspect ratio when SHIFT is clicked", () => {
     fireEvent.pointerUp(canvas);
 
     expect(renderScene).toHaveBeenCalledTimes(5);
-    expect(h.appState.selectionElement).toBeNull();
+    expect(h.state.selectionElement).toBeNull();
     expect(h.elements.length).toEqual(1);
     expect([h.elements[0].x, h.elements[0].y]).toEqual([29, 47]);
     expect([h.elements[0].width, h.elements[0].height]).toEqual([30, 50]);
+
+    h.elements.forEach((element) => expect(element).toMatchSnapshot());
   });
 });

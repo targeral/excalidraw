@@ -1,9 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { render, fireEvent } from "./test-utils";
-import { App } from "../components/App";
+import App from "../components/App";
 import * as Renderer from "../renderer/renderScene";
 import { KEYS } from "../keys";
+import { reseed } from "../random";
 
 // Unmount ReactDOM from root
 ReactDOM.unmountComponentAtNode(document.getElementById("root")!);
@@ -12,9 +13,10 @@ const renderScene = jest.spyOn(Renderer, "renderScene");
 beforeEach(() => {
   localStorage.clear();
   renderScene.mockClear();
+  reseed(7);
 });
 
-const { __TEST__: h } = window;
+const { h } = window;
 
 describe("selection element", () => {
   it("create selection element on pointer down", () => {
@@ -27,7 +29,7 @@ describe("selection element", () => {
     fireEvent.pointerDown(canvas, { clientX: 60, clientY: 100 });
 
     expect(renderScene).toHaveBeenCalledTimes(1);
-    const selectionElement = h.appState.selectionElement!;
+    const selectionElement = h.state.selectionElement!;
     expect(selectionElement).not.toBeNull();
     expect(selectionElement.type).toEqual("selection");
     expect([selectionElement.x, selectionElement.y]).toEqual([60, 100]);
@@ -48,7 +50,7 @@ describe("selection element", () => {
     fireEvent.pointerMove(canvas, { clientX: 150, clientY: 30 });
 
     expect(renderScene).toHaveBeenCalledTimes(2);
-    const selectionElement = h.appState.selectionElement!;
+    const selectionElement = h.state.selectionElement!;
     expect(selectionElement).not.toBeNull();
     expect(selectionElement.type).toEqual("selection");
     expect([selectionElement.x, selectionElement.y]).toEqual([60, 30]);
@@ -70,7 +72,7 @@ describe("selection element", () => {
     fireEvent.pointerUp(canvas);
 
     expect(renderScene).toHaveBeenCalledTimes(3);
-    expect(h.appState.selectionElement).toBeNull();
+    expect(h.state.selectionElement).toBeNull();
   });
 });
 
@@ -95,9 +97,11 @@ describe("select single element on the scene", () => {
     fireEvent.pointerUp(canvas);
 
     expect(renderScene).toHaveBeenCalledTimes(7);
-    expect(h.appState.selectionElement).toBeNull();
+    expect(h.state.selectionElement).toBeNull();
     expect(h.elements.length).toEqual(1);
-    expect(h.appState.selectedElementIds[h.elements[0].id]).toBeTruthy();
+    expect(h.state.selectedElementIds[h.elements[0].id]).toBeTruthy();
+
+    h.elements.forEach((element) => expect(element).toMatchSnapshot());
   });
 
   it("diamond", () => {
@@ -120,9 +124,11 @@ describe("select single element on the scene", () => {
     fireEvent.pointerUp(canvas);
 
     expect(renderScene).toHaveBeenCalledTimes(7);
-    expect(h.appState.selectionElement).toBeNull();
+    expect(h.state.selectionElement).toBeNull();
     expect(h.elements.length).toEqual(1);
-    expect(h.appState.selectedElementIds[h.elements[0].id]).toBeTruthy();
+    expect(h.state.selectedElementIds[h.elements[0].id]).toBeTruthy();
+
+    h.elements.forEach((element) => expect(element).toMatchSnapshot());
   });
 
   it("ellipse", () => {
@@ -145,9 +151,11 @@ describe("select single element on the scene", () => {
     fireEvent.pointerUp(canvas);
 
     expect(renderScene).toHaveBeenCalledTimes(7);
-    expect(h.appState.selectionElement).toBeNull();
+    expect(h.state.selectionElement).toBeNull();
     expect(h.elements.length).toEqual(1);
-    expect(h.appState.selectedElementIds[h.elements[0].id]).toBeTruthy();
+    expect(h.state.selectedElementIds[h.elements[0].id]).toBeTruthy();
+
+    h.elements.forEach((element) => expect(element).toMatchSnapshot());
   });
 
   it("arrow", () => {
@@ -183,9 +191,10 @@ describe("select single element on the scene", () => {
     fireEvent.pointerUp(canvas);
 
     expect(renderScene).toHaveBeenCalledTimes(7);
-    expect(h.appState.selectionElement).toBeNull();
+    expect(h.state.selectionElement).toBeNull();
     expect(h.elements.length).toEqual(1);
-    expect(h.appState.selectedElementIds[h.elements[0].id]).toBeTruthy();
+    expect(h.state.selectedElementIds[h.elements[0].id]).toBeTruthy();
+    h.elements.forEach((element) => expect(element).toMatchSnapshot());
   });
 
   it("arrow escape", () => {
@@ -221,8 +230,10 @@ describe("select single element on the scene", () => {
     fireEvent.pointerUp(canvas);
 
     expect(renderScene).toHaveBeenCalledTimes(7);
-    expect(h.appState.selectionElement).toBeNull();
+    expect(h.state.selectionElement).toBeNull();
     expect(h.elements.length).toEqual(1);
-    expect(h.appState.selectedElementIds[h.elements[0].id]).toBeTruthy();
+    expect(h.state.selectedElementIds[h.elements[0].id]).toBeTruthy();
+
+    h.elements.forEach((element) => expect(element).toMatchSnapshot());
   });
 });

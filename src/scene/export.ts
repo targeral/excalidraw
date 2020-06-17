@@ -1,44 +1,58 @@
 import rough from "roughjs/bin/rough";
-import { ExcalidrawElement } from "../element/types";
+import oc from "open-color";
+import { newTextElement } from "../element";
+import { NonDeletedExcalidrawElement } from "../element/types";
 import { getCommonBounds } from "../element/bounds";
 import { renderScene, renderSceneToSvg } from "../renderer/renderScene";
-import { distance, SVG_NS } from "../utils";
+import { distance, SVG_NS, measureText, getFontString } from "../utils";
 import { normalizeScroll } from "./scroll";
 import { AppState } from "../types";
+import { t } from "../i18n";
+import { DEFAULT_FONT_FAMILY } from "../appState";
 
-export function exportToCanvas(
-  elements: readonly ExcalidrawElement[],
+export const SVG_EXPORT_TAG = `<!-- svg-source:excalidraw -->`;
+
+export const exportToCanvas = (
+  elements: readonly NonDeletedExcalidrawElement[],
   appState: AppState,
   {
     exportBackground,
     exportPadding = 10,
     viewBackgroundColor,
     scale = 1,
+    shouldAddWatermark,
   }: {
     exportBackground: boolean;
     exportPadding?: number;
     scale?: number;
     viewBackgroundColor: string;
+    shouldAddWatermark: boolean;
   },
-  createCanvas: (width: number, height: number) => any = function(
-    width,
-    height,
-  ) {
+  createCanvas: (width: number, height: number) => any = (width, height) => {
     const tempCanvas = document.createElement("canvas");
     tempCanvas.width = width * scale;
     tempCanvas.height = height * scale;
     return tempCanvas;
   },
-) {
+) => {
+  let sceneElements = elements;
+  if (shouldAddWatermark) {
+    const [, , maxX, maxY] = getCommonBounds(elements);
+    sceneElements = [...sceneElements, getWatermarkElement(maxX, maxY)];
+  }
+
   // calculate smallest area to fit the contents in
-  const [minX, minY, maxX, maxY] = getCommonBounds(elements);
+  const [minX, minY, maxX, maxY] = getCommonBounds(sceneElements);
   const width = distance(minX, maxX) + exportPadding * 2;
-  const height = distance(minY, maxY) + exportPadding * 2;
+  const height =
+    distance(minY, maxY) +
+    exportPadding +
+    (shouldAddWatermark ? 0 : exportPadding);
 
   const tempCanvas: any = createCanvas(width, height);
 
   renderScene(
-    elements,
+    sceneElements,
     appState,
     null,
     scale,
@@ -50,6 +64,9 @@ export function exportToCanvas(
       scrollY: normalizeScroll(-minY + exportPadding),
       zoom: 1,
       remotePointerViewportCoords: {},
+      remoteSelectedElementIds: {},
+      shouldCacheIgnoreZoom: false,
+      remotePointerUsernames: {},
     },
     {
       renderScrollbars: false,
@@ -57,25 +74,37 @@ export function exportToCanvas(
       renderOptimizations: false,
     },
   );
-  return tempCanvas;
-}
 
-export function exportToSvg(
-  elements: readonly ExcalidrawElement[],
+  return tempCanvas;
+};
+
+export const exportToSvg = (
+  elements: readonly NonDeletedExcalidrawElement[],
   {
     exportBackground,
     exportPadding = 10,
     viewBackgroundColor,
+    shouldAddWatermark,
   }: {
     exportBackground: boolean;
     exportPadding?: number;
     viewBackgroundColor: string;
+    shouldAddWatermark: boolean;
   },
-): SVGSVGElement {
+): SVGSVGElement => {
+  let sceneElements = elements;
+  if (shouldAddWatermark) {
+    const [, , maxX, maxY] = getCommonBounds(elements);
+    sceneElements = [...sceneElements, getWatermarkElement(maxX, maxY)];
+  }
+
   // calculate canvas dimensions
-  const [minX, minY, maxX, maxY] = getCommonBounds(elements);
+  const [minX, minY, maxX, maxY] = getCommonBounds(sceneElements);
   const width = distance(minX, maxX) + exportPadding * 2;
-  const height = distance(minY, maxY) + exportPadding * 2;
+  const height =
+    distance(minY, maxY) +
+    exportPadding +
+    (shouldAddWatermark ? 0 : exportPadding);
 
   // initialze SVG root
   const svgRoot = document.createElementNS(SVG_NS, "svg");
@@ -84,15 +113,16 @@ export function exportToSvg(
   svgRoot.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
   svgRoot.innerHTML = `
+  ${SVG_EXPORT_TAG}
   <defs>
     <style>
       @font-face {
         font-family: "Virgil";
-        src: url("https://excalidraw.com/FG_Virgil.ttf");
+        src: url("https://excalidraw.com/FG_Virgil.woff2");
       }
       @font-face {
         font-family: "Cascadia";
-        src: url("https://excalidraw.com/Cascadia.ttf");
+        src: url("https://excalidraw.com/Cascadia.woff2");
       }
     </style>
   </defs>
@@ -110,9 +140,36 @@ export function exportToSvg(
   }
 
   const rsvg = rough.svg(svgRoot);
-  renderSceneToSvg(elements, rsvg, svgRoot, {
+  renderSceneToSvg(sceneElements, rsvg, svgRoot, {
     offsetX: -minX + exportPadding,
     offsetY: -minY + exportPadding,
   });
+
   return svgRoot;
-}
+};
+
+const getWatermarkElement = (maxX: number, maxY: number) => {
+  const text = t("labels.madeWithExcalidraw");
+  const fontSize = 16;
+  const fontFamily = DEFAULT_FONT_FAMILY;
+  const { width: textWidth } = measureText(
+    text,
+    getFontString({ fontSize, fontFamily }),
+  );
+
+  return newTextElement({
+    text,
+    fontSize,
+    fontFamily,
+    textAlign: "center",
+    x: maxX - textWidth / 2,
+    y: maxY + 16,
+    strokeColor: oc.gray[5],
+    backgroundColor: "transparent",
+    fillStyle: "hachure",
+    strokeWidth: 1,
+    strokeStyle: "solid",
+    roughness: 1,
+    opacity: 100,
+  });
+};
